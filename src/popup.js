@@ -29,16 +29,16 @@ function updatePopup(possibleWords) {
   wordList.innerHTML = '';
 
   const wordListTitle = document.getElementById('wordListTitle');
-  if (!possibleWords) {
-    wordListTitle.textContent = 'Click the "Analyze Game Board" button';
+  if (!possibleWords || possibleWords.length === 0) {
+    wordListTitle.textContent = 'Click the Button';
     return;
   }
 
-  wordListTitle.textContent = 'Possible Words';
+  wordListTitle.textContent = `Possible Words (${possibleWords.length})`;
   possibleWords.forEach(word => {
-    const li = document.createElement('li');
-    li.appendChild(document.createTextNode(word));
-    wordList.appendChild(li);
+    const wordContainer = document.createElement('div');
+    wordContainer.appendChild(document.createTextNode(`- ${word}`));
+    wordList.appendChild(wordContainer);
   });
 }
 
