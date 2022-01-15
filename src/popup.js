@@ -9,6 +9,39 @@ wordleHintButton.addEventListener("click", async () => {
   });
 });
 
+chrome.storage.local.get(['possibleWords'], function(result) {
+  updatePopup(result);
+});
+
+chrome.storage.onChanged.addListener((changes) => {
+  for (let [key, { oldValue, newValue }] of Object.entries(changes)) {
+    if (key !== 'possibleWords') {
+      continue;
+    }
+
+    console.log('All possible words changed from', oldValue, 'to', newValue);
+    updatePopup(newValue);
+  }
+});
+
+function updatePopup(possibleWords) {
+  const wordList = document.getElementById('wordList');
+  wordList.innerHTML = '';
+
+  const wordListTitle = document.getElementById('wordListTitle');
+  if (!possibleWords) {
+    wordListTitle.textContent = 'Click the "Analyze Game Board" button';
+    return;
+  }
+
+  wordListTitle.textContent = 'Possible Words';
+  possibleWords.forEach(word => {
+    const li = document.createElement('li');
+    li.appendChild(document.createTextNode(word));
+    wordList.appendChild(li);
+  });
+}
+
 function giveWordleHint() {
   if (!document.URL.match(/.*wordle.*/)) {
     return;
@@ -16,8 +49,9 @@ function giveWordleHint() {
 
   // find the known constraints
 
-  const absentLetters = [];
-  const tileLetters = {};
+  const letterConstraints = {};
+  const possibleLetters = [];
+  const excludedLetters = [];
 
   const gameRows = document.querySelector('game-app').shadowRoot
   .querySelector('game-theme-manager')
@@ -37,39 +71,45 @@ function giveWordleHint() {
         return;
       }
 
-      if (evaluation === 'absent') {
-        absentLetters.push(letter);
+      // TODO: better handle the case when one letter is in multiple positions
+      if (evaluation === 'absent' && !possibleLetters.includes(letter)) {
+        // If a letter is entered more than once, it can be evaluated
+        // as absent and present in different positions. So it should
+        // not be excluded if it has been evaluated as present already.
+        excludedLetters.push(letter);
       } else if (evaluation === 'correct') {
-        tileLetters[tileIndex] = { confirmed: letter };
+        possibleLetters.push(letter);
+        letterConstraints[tileIndex] = { confirmed: letter };
       } else if (evaluation === 'present') {
-        if (!tileLetters[tileIndex]) {
-          tileLetters[tileIndex] = { exclusion: [letter] };
-        } else if (tileLetters[tileIndex]['exclusion']) {
-          tileLetters[tileIndex]['exclusion'].push(letter);
-        } else if (tileLetters[tileIndex]['confirmed']) {
+        possibleLetters.push(letter);
+        if (!letterConstraints[tileIndex]) {
+          letterConstraints[tileIndex] = { exclusion: [letter] };
+        } else if (letterConstraints[tileIndex]['exclusion']) {
+          letterConstraints[tileIndex]['exclusion'].push(letter);
+        } else if (letterConstraints[tileIndex]['confirmed']) {
           // do nothing
         } else {
-          console.warn(`Invalid letter constraint (position ${tileIndex}: ${tileLetters[tileIndex]}`);
+          console.warn(`Invalid letter constraint (position ${tileIndex}: ${letterConstraints[tileIndex]}`);
         }
       }
     });
   })
 
-  console.log('tileLetters:', tileLetters)
-  console.log('absentLetters:', absentLetters)
+  console.log('tileLetters:', letterConstraints)
+  console.log('absentLetters:', excludedLetters)
 
   // construct the regex for each letter
 
   const ALL_LETTERS = Array.from(Array(26)).map((_, i) => i + 97).map(x => String.fromCharCode(x));
-  const allPossibleLetters = ALL_LETTERS.filter(l => !absentLetters.includes(l));
+  const allPossibleLetters = ALL_LETTERS.filter(l => !excludedLetters.includes(l));
   const regexArray = [];
   for (let i = 0; i < 5; ++i) {
-    if (!tileLetters[i]) {
+    if (!letterConstraints[i]) {
       regexArray.push(`[${allPossibleLetters.join('')}]`);
-    } else if (tileLetters[i]['confirmed']) {
-      regexArray.push(tileLetters[i]['confirmed']);
-    } else if (tileLetters[i]['exclusion']) {
-      const letters = allPossibleLetters.filter(l => !tileLetters[i]['exclusion'].includes(l));
+    } else if (letterConstraints[i]['confirmed']) {
+      regexArray.push(letterConstraints[i]['confirmed']);
+    } else if (letterConstraints[i]['exclusion']) {
+      const letters = allPossibleLetters.filter(l => !letterConstraints[i]['exclusion'].includes(l));
       regexArray.push(`[${letters.join('')}]`)
     }
   }
@@ -5837,6 +5877,9 @@ function giveWordleHint() {
     "zowie",
   ]
   const regexString = regexArray.join('');
-  const possibleWords = WORDS.filter(word => word.match(regexString));
+  const possibleWords = WORDS.filter(word => word.match(regexString)).sort();
   console.log('Possible words:', possibleWords);
+  // TODO: remove the hack
+  chrome.storage.local.set({ possibleWords: [] });
+  chrome.storage.local.set({ possibleWords });
 }

@@ -3,7 +3,10 @@
   "description": "Help you find solution for the Wordle game.",
   "version": "0.1.0",
   "manifest_version": 3,
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
+  "background": {
+    "service_worker": "src/background.js"
+  },
   "action": {
     "default_popup": "src/popup.html"
   }
